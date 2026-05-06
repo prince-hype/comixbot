@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+<title>ComicVerse — Читалка</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #000;
+    --surface: #1a1a1f;
+    --surface-light: #222228;
+    --accent: #ff2d55;
+    --text: #eee;
+    --dim: #666;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    touch-action: pan-x pan-y pinch-zoom;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: rgba(10,10,12,.92);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    z-index: 100;
+  }
+  .topbar-title {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 800;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .topbar-vpn {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--dim);
+    background: var(--surface);
+    padding: 5px 10px;
+    border-radius: 6px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  /* ── Chapter button in topbar ── */
+  .chapter-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: linear-gradient(135deg, var(--accent) 0%, #ff4d6d 100%);
+    border: none;
+    border-radius: 10px;
+    color: #fff;
+    font-family: 'Nunito', sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 2px 12px rgba(255,45,85,.35);
+    transition: all .15s;
+  }
+  .chapter-btn:active { transform: scale(.95); }
+  .chapter-btn svg { width: 14px; height: 14px; opacity: .9; }
+
+  /* ── Закладка в шапке ── */
+  .topbar-bookmark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px; height: 32px;
+    background: transparent;
+    border: 1.5px solid rgba(255,255,255,.15);
+    border-radius: 9px;
+    color: var(--dim);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all .18s ease;
+  }
+  .topbar-bookmark:active { transform: scale(.88); }
+  .topbar-bookmark svg { width: 16px; height: 16px; }
+  .topbar-bookmark.saved {
+    background: linear-gradient(135deg, var(--accent) 0%, #ff4d6d 100%);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 2px 10px rgba(255,45,85,.35);
+  }
+  .topbar-bookmark.saved svg {
+    fill: #fff;
+    stroke: #fff;
+  }
+
+  /* ── Bookmark button ── */
+  .bookmark-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px; height: 34px;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 10px;
+    color: var(--text);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all .15s;
+  }
+  .bookmark-btn:active { transform: scale(.9); }
+  .bookmark-btn svg { width: 18px; height: 18px; }
+  .bookmark-btn.saved {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    box-shadow: 0 2px 10px rgba(255,45,85,.35);
+  }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed;
+    bottom: 120px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: rgba(26,26,31,.97);
+    color: var(--text);
+    padding: 12px 20px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 700;
+    border: 1px solid rgba(255,45,85,.3);
+    box-shadow: 0 8px 30px rgba(0,0,0,.5);
+    z-index: 400;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s, transform .25s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  body.locked { overflow: hidden; touch-action: none; }
+
+  /* ── Chapter picker sheet ── */
+  .chapter-sheet-bg {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.6);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 300;
+    display: none;
+    opacity: 0;
+    transition: opacity .2s;
+  }
+  .chapter-sheet-bg.open { display: block; opacity: 1; }
+  .chapter-sheet {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(.95);
+    width: calc(100% - 32px);
+    max-width: 420px;
+    max-height: 70vh;
+    background: linear-gradient(180deg, #1a1a22 0%, #13131a 100%);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 20px;
+    z-index: 301;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,.8), 0 0 40px rgba(255,45,85,.15);
+    opacity: 0;
+    transition: opacity .2s, transform .2s;
+  }
+  .chapter-sheet.open {
+    display: flex;
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  .chapter-sheet-header {
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .chapter-sheet-title {
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: .3px;
+  }
+  .chapter-sheet-close {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    background: var(--surface);
+    border: none;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .chapter-sheet-close:active { opacity: .6; }
+  .chapter-sheet-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .chapter-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    margin-bottom: 4px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background .15s;
+    border: 1px solid transparent;
+  }
+  .chapter-item:active { background: var(--surface-light); }
+  .chapter-item.current {
+    background: rgba(255,45,85,.12);
+    border-color: rgba(255,45,85,.3);
+  }
+  .chapter-num {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--text);
+    flex-shrink: 0;
+  }
+  .chapter-item.current .chapter-num {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(255,45,85,.4);
+  }
+  .chapter-info { flex: 1; min-width: 0; }
+  .chapter-title-text {
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .chapter-meta {
+    font-size: 11px;
+    color: var(--dim);
+    font-weight: 600;
+    margin-top: 2px;
+  }
+  .chapter-check {
+    width: 20px; height: 20px;
+    flex-shrink: 0;
+    opacity: 0;
+  }
+  .chapter-item.current .chapter-check { opacity: 1; color: var(--accent); }
+
+  /* ── Reader — fixed width, centered, black bars on sides ── */
+  .reader {
+    padding-top: 48px;
+    padding-bottom: 80px;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  .reader img {
+    width: 100%;
+    display: block;
+    min-height: 60vh; /* пока картинка грузится — показываем область с надписью */
+    background:
+      /* текст "Загружается…" по центру через градиент невозможно,
+         используем data-URL SVG с текстом */
+      center / auto no-repeat
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='280' height='40'><text x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23666' font-family='system-ui,sans-serif' font-size='14' font-weight='700'>Загружается страница...</text></svg>"),
+      linear-gradient(180deg, #0d0d12 0%, #141420 100%);
+  }
+  /* Когда картинка загружена — убираем фон (срабатывает для загруженных img) */
+  .reader img[data-loaded="1"] {
+    min-height: 0;
+    background: none;
+  }
+
+  /* ── Placeholder page ── */
+  .placeholder-page {
+    width: 100%;
+    aspect-ratio: 2/3;
+    background: linear-gradient(180deg, #0d0d12 0%, #141420 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    position: relative;
+    border-bottom: 1px solid rgba(255,255,255,.03);
+  }
+  .placeholder-page .ph-icon { font-size: 48px; opacity:.4; }
+  .placeholder-page .ph-label {
+    font-size: 13px; font-weight: 700; color: rgba(255,255,255,.2);
+  }
+
+  /* ── Bottom nav — separate buttons ── */
+  .bottomnav {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 12px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    background: linear-gradient(to top, rgba(0,0,0,.95) 60%, transparent);
+    z-index: 100;
+  }
+  .nav-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 12px;
+    color: var(--text);
+    cursor: pointer;
+    transition: all .15s;
+    flex-shrink: 0;
+  }
+  .nav-btn:active {
+    transform: scale(.92);
+    background: var(--surface-light);
+  }
+  .nav-btn:disabled { opacity: .25; pointer-events: none; }
+  .nav-btn.active { color: var(--accent); }
+  .nav-btn svg { width: 20px; height: 20px; }
+
+  /* Bookmark button — выделенная */
+  .bookmark-btn {
+    background: linear-gradient(135deg, rgba(255,45,85,.25) 0%, rgba(255,77,109,.25) 100%);
+    border-color: rgba(255,45,85,.4);
+  }
+  .bookmark-btn:active {
+    background: linear-gradient(135deg, var(--accent) 0%, #ff4d6d 100%);
+    transform: scale(.88);
+  }
+  .bookmark-btn.saved {
+    background: linear-gradient(135deg, var(--accent) 0%, #ff4d6d 100%);
+    border-color: var(--accent);
+    color: #fff;
+    box-shadow: 0 2px 12px rgba(255,45,85,.5);
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: linear-gradient(135deg, #1e1e24 0%, #2a2a32 100%);
+    color: var(--text);
+    padding: 12px 20px;
+    border-radius: 14px;
+    font-size: 14px;
+    font-weight: 700;
+    border: 1px solid rgba(255,45,85,.3);
+    box-shadow: 0 8px 30px rgba(0,0,0,.5), 0 0 20px rgba(255,45,85,.2);
+    z-index: 500;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s, transform .25s;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  .page-pill {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 44px;
+    padding: 0 16px;
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--dim);
+    letter-spacing: .5px;
+    white-space: nowrap;
+  }
+
+  /* ── Grid overlay ── */
+  .grid-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.97);
+    z-index: 200;
+    display: none;
+    flex-direction: column;
+  }
+  .grid-overlay.open { display: flex; }
+  .grid-header {
+    display: flex;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    flex-shrink: 0;
+  }
+  .grid-header-title { flex: 1; font-size: 15px; font-weight: 800; }
+  .grid-close {
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 10px;
+    color: var(--accent);
+    font-family: 'Nunito', sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    padding: 8px 16px;
+  }
+  .grid-close:active { opacity: .7; }
+  .grid-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    align-content: start;
+    -webkit-overflow-scrolling: touch;
+  }
+  @media (min-width: 600px) {
+    .grid-body { grid-template-columns: repeat(4, 1fr); }
+  }
+  @media (min-width: 900px) {
+    .grid-body { grid-template-columns: repeat(5, 1fr); }
+  }
+  .grid-thumb {
+    aspect-ratio: 3/4;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    position: relative;
+    border: 2px solid transparent;
+    background: #111;
+  }
+  .grid-thumb.current { border-color: var(--accent); }
+  .grid-thumb:active { opacity: .7; }
+  /* object-position: top — показываем верх страницы (обычно первый кадр/заголовок),
+     так превью гораздо полезнее, чем сжатая целиком страница в полосы */
+  .grid-thumb img {
+    width:100%;
+    height:100%;
+    object-fit: cover;
+    object-position: top center;
+    display:block;
+    background: #fff;
+  }
+  .grid-thumb-ph {
+    width:100%; height:100%;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(180deg, #151520, #111);
+    font-size: 22px; opacity:.4;
+  }
+  .grid-thumb-num {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    text-align: center;
+    font-size: 11px; font-weight: 800;
+    color: #fff;
+    background: rgba(0,0,0,.7);
+    padding: 3px 0;
+  }
+
+  /* ── Loading ── */
+  .initial-loading {
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    color: var(--dim);
+    font-weight: 700;
+  }
+  .spinner {
+    width: 28px; height: 28px;
+    border: 3px solid var(--surface);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Progress bar ── */
+  .progress-bar {
+    position: fixed;
+    top: 47px; left: 0;
+    height: 2px;
+    background: var(--accent);
+    z-index: 101;
+    transition: width .1s linear;
+    box-shadow: 0 0 8px rgba(255,45,85,.5);
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar" id="topbar">
+  <span class="topbar-title" id="comicTitle">Загрузка...</span>
+  <button class="chapter-btn" id="chapterBtn" style="display:none;">
+    <span id="chapterBtnLabel">Глава 1</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+  </button>
+  <button class="topbar-bookmark" id="btnBookmark" title="Закладка">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+  </button>
+  <a class="topbar-vpn" id="sourceLink" href="#" target="_blank" style="display:none;">Источник ↗</a>
+</div>
+<div class="progress-bar" id="progressBar" style="width:0%"></div>
+
+<!-- Chapter picker -->
+<div class="chapter-sheet-bg" id="chapterSheetBg"></div>
+<div class="chapter-sheet" id="chapterSheet">
+  <div class="chapter-sheet-header">
+    <span class="chapter-sheet-title">📖 Выбор главы</span>
+    <button class="chapter-sheet-close" id="chapterSheetClose">×</button>
+  </div>
+  <div class="chapter-sheet-list" id="chapterSheetList"></div>
+</div>
+
+<div class="reader" id="reader">
+  <div class="initial-loading">
+    <div class="spinner"></div>
+    <span>Загружаем комикс...</span>
+  </div>
+</div>
+
+<div class="grid-overlay" id="gridOverlay">
+  <div class="grid-header">
+    <span class="grid-header-title" id="gridTitle">Страницы</span>
+    <button class="grid-close" id="gridClose">Закрыть</button>
+  </div>
+  <div class="grid-body" id="gridBody"></div>
+</div>
+
+<div class="bottomnav" id="bottomnav">
+  <button class="nav-btn" id="btnPrev" title="В начало">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="6" x2="5" y2="18"/><polyline points="17 18 9 12 17 6"/></svg>
+  </button>
+  <button class="nav-btn" id="btnPrevPage" title="Назад">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+  </button>
+  <span class="page-pill" id="pagePill">— / —</span>
+  <button class="nav-btn" id="btnNextPage" title="Вперёд">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
+  </button>
+  <button class="nav-btn" id="btnLast" title="В конец">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 6 15 12 7 18"/><line x1="19" y1="6" x2="19" y2="18"/></svg>
+  </button>
+  <button class="nav-btn" id="btnGrid" title="Все страницы">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+  </button>
+</div>
+
+<!-- Toast уведомление о закладке -->
+<div id="toast" class="toast">🔖 Закладка сохранена</div>
+
+<script>
+// ══════════════════════════════════════════════════════
+//  FALLBACK ДЛЯ КАРТИНОК
+// ══════════════════════════════════════════════════════
+// CDN Remanga (img.reimg.org / img.reimg2.org) блокирует прямой доступ.
+// wsrv.nl и weserv.nl закрывают соединение для этих доменов (ERR_CONNECTION_CLOSED).
+// Используем универсальные прокси без whitelist-а.
+window.tryFallback = function(img, pageIdx) {
+  try {
+    const orig = img.dataset.orig || img.src;
+    const stage = parseInt(img.dataset.stage || '0');
+
+    // Цепочка универсальных прокси (без whitelist-а доменов).
+    // Порядок подобран эмпирически: наиболее надёжные первыми.
+    const fallbacks = [
+      // corsproxy.io — универсальный, работает с любым доменом
+      'https://corsproxy.io/?' + encodeURIComponent(orig),
+      // allorigins — публичный CORS-прокси
+      'https://api.allorigins.win/raw?url=' + encodeURIComponent(orig),
+      // thingproxy — ещё один резервный
+      'https://thingproxy.freeboard.io/fetch/' + orig,
+      // Googleusercontent — картиночный прокси Google (для <img> работает)
+      'https://images' + Math.floor(Math.random() * 4) + '-focus-opensocial.googleusercontent.com/gadgets/proxy?container=focus&refresh=2592000&url=' + encodeURIComponent(orig),
+    ];
+
+    if (stage < fallbacks.length) {
+      img.dataset.stage = String(stage + 1);
+      img.src = fallbacks[stage];
+      return;
+    }
+
+    // Все прокси упали — показываем placeholder, но только если img ещё в DOM
+    if (img.parentNode) {
+      const ph = document.createElement('div');
+      ph.className = 'placeholder-page';
+      ph.dataset.page = pageIdx;
+      ph.innerHTML = `<div class="ph-icon">⚠️</div>
+                      <div class="ph-label">Ошибка загрузки стр. ${pageIdx + 1}</div>`;
+      img.parentNode.replaceChild(ph, img);
+    }
+  } catch (e) {
+    // В крайнем случае просто скрываем битую картинку — без шума в консоли
+    try { img.style.display = 'none'; } catch (_) {}
+  }
+};
+
+// ══════════════════════════════════════════════════════
+//  ДАННЫЕ КОМИКСОВ
+//
+//  Как добавить ссылки на страницы с com-x.life:
+//
+//  Способ 1 (Быстрый — из браузера):
+//    1. Откройте комикс на com-x.life, нажмите «Читать»
+//    2. Откройте DevTools (F12) → Console
+//    3. Вставьте и выполните:
+//       document.querySelectorAll('.manga-img img, .reader-images img, img[data-src]').forEach((img,i) => console.log(img.src || img.dataset.src))
+//    4. Скопируйте URL-ы и вставьте в page_urls
+//
+//  Способ 2 (через Network tab):
+//    1. Откройте DevTools → Network → фильтр «Img»
+//    2. Откройте страницу чтения комикса
+//    3. Все загруженные картинки — это страницы
+//    4. ПКМ → Copy → Copy link address
+//
+//  Способ 3 (extract_urls.py — скрипт в этой папке):
+//    python extract_urls.py "https://com-x.life/readcomix/1315-thor-v3-read/1/1.html"
+// ══════════════════════════════════════════════════════
+const COMICS_DATA = {
+
+  // ── Thor Vol. 3 ──
+  // Вставь реальные URL в page_urls каждой главы
+  1: {
+    title: "Thor Vol. 3",
+    source_url: "https://com-x.life/1315-thor-v3-read.html",
+    chapters: [
+      { num: 1, title: "Глава 1", page_urls: [] },
+      { num: 2, title: "Глава 2", page_urls: [] },
+      { num: 3, title: "Глава 3", page_urls: [] },
+    ],
+  },
+
+  2: {
+    title: "Daredevil Vol. 1",
+    source_url: "https://com-x.life/138-daredevil-v1.html",
+    chapters: [
+      { num: 1, title: "Глава 1", page_urls: [] },
+      { num: 2, title: "Глава 2", page_urls: [] },
+    ],
+  },
+
+  3: {
+    title: "Алтимейт Человек-Паук Том 1",
+    source_url: "https://com-x.life/ultimate-spider-man-v1.html",
+    chapters: [
+      { num: 1, title: "Глава 1", page_urls: [] },
+    ],
+  },
+
+  4: {
+    title: "Solo Leveling",
+    source_url: null,
+    chapters: [
+      { num: 1, title: "Глава 1", page_urls: [] },
+    ],
+  },
+
+  5: {
+    title: "One Punch Man",
+    source_url: null,
+    chapters: [
+      { num: 1, title: "Глава 1", page_urls: [] },
+    ],
+  },
+};
+
+const FALLBACK_PAGES = 6;
+
+
+// ══════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════
+let comic = null;
+let currentChapter = 0;
+let totalPages = 0;
+let currentVisiblePage = 0;
+let gridOpen = false;
+let chapterSheetOpen = false;
+
+const reader       = document.getElementById('reader');
+const comicTitle   = document.getElementById('comicTitle');
+const sourceLink   = document.getElementById('sourceLink');
+const pagePill     = document.getElementById('pagePill');
+const progressBar  = document.getElementById('progressBar');
+const gridOverlay  = document.getElementById('gridOverlay');
+const gridBody     = document.getElementById('gridBody');
+const gridTitle    = document.getElementById('gridTitle');
+const chapterBtn      = document.getElementById('chapterBtn');
+const chapterBtnLabel = document.getElementById('chapterBtnLabel');
+const chapterSheet    = document.getElementById('chapterSheet');
+const chapterSheetBg  = document.getElementById('chapterSheetBg');
+const chapterSheetList  = document.getElementById('chapterSheetList');
+const chapterSheetClose = document.getElementById('chapterSheetClose');
+
+
+// ══════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════
+(async function init() {
+  if (window.Telegram?.WebApp) {
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+    tg.ready();
+    try {
+      tg.setHeaderColor('#0a0a0c');
+      tg.setBackgroundColor('#000000');
+    } catch(e) {}
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const id = parseInt(params.get('id'));
+  const dParam = params.get('d');
+  const srcParam = params.get('src');
+
+  if (dParam) {
+    try {
+      let b = dParam.replace(/-/g, '+').replace(/_/g, '/');
+      while (b.length % 4) b += '=';
+      const json = decodeURIComponent(escape(atob(b)));
+      comic = JSON.parse(json);
+    } catch (e) {
+      console.error('Bad d param:', e);
+    }
+  } else if (srcParam) {
+    // Показываем индикатор загрузки, пока фетчим JSON с JSONBin
+    reader.innerHTML = `
+      <div class="initial-loading">
+        <span style="font-size:48px;">⏳</span>
+        <span>Загружаем комикс…</span>
+      </div>`;
+    try {
+      const res = await fetch(srcParam, { cache: 'default' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const resp = await res.json();
+      // JSONBin оборачивает наш JSON в { record: ..., metadata: ... }
+      comic = resp.record || resp;
+      // Подмешиваем прогресс из URL (?p=chapter-page), если есть
+      const pParam = params.get('p');
+      if (pParam) {
+        const [chNum, pgNum] = pParam.split('-').map(Number);
+        if (chNum && pgNum) {
+          comic.progress = { chapter_num: chNum, page_num: pgNum };
+        }
+      }
+    } catch (e) {
+      console.error('Fetch src failed:', e);
+    }
+  }
+
+  if (!comic) {
+    // Последний фолбэк — локальный массив (для теста без бота)
+    comic = COMICS_DATA[id];
+  }
+
+  if (!comic) {
+    reader.innerHTML = `
+      <div class="initial-loading">
+        <span style="font-size:48px;">😕</span>
+        <span>Комикс не найден</span>
+      </div>`;
+    return;
+  }
+
+  comicTitle.textContent = comic.title;
+
+  // Обратная совместимость: если у комикса page_urls на верхнем уровне — оборачиваем в 1 главу
+  if (!comic.chapters && comic.page_urls) {
+    comic.chapters = [{ num: 1, title: "Глава 1", page_urls: comic.page_urls }];
+  }
+  if (!comic.chapters || comic.chapters.length === 0) {
+    comic.chapters = [{ num: 1, title: "Глава 1", page_urls: [] }];
+  }
+
+  // Стартовая глава и страница:
+  // 1) Из URL ?chapter=N (если передан)
+  // 2) Из сохранённой закладки (CloudStorage / localStorage)
+  // 3) По умолчанию глава 1, страница 1
+  let startPage = 0;
+  const startCh = parseInt(params.get('chapter'));
+  if (!isNaN(startCh) && startCh >= 1 && startCh <= comic.chapters.length) {
+    currentChapter = startCh - 1;
+  } else {
+    // Попытаемся загрузить закладку асинхронно (после init)
+    loadBookmarkAndJump();
+  }
+
+  // Показываем кнопку главы
+  if (comic.chapters.length >= 1) {
+    chapterBtn.style.display = '';
+  }
+
+  if (comic.source_url) {
+    sourceLink.href = comic.source_url;
+    sourceLink.style.display = '';
+  }
+
+  try { setupNav(); } catch(e) { showDebug('setupNav: ' + e.message); }
+  try { setupScroll(); } catch(e) { showDebug('setupScroll: ' + e.message); }
+  try { setupChapterPicker(); } catch(e) { showDebug('setupChapterPicker: ' + e.message); }
+
+  try {
+    loadChapter(currentChapter);
+    if (startPage > 0) {
+      requestAnimationFrame(() => scrollToPage(startPage));
+    }
+  } catch(e) { showDebug('loadChapter: ' + e.message); }
+})();
+
+// ── Хранилище закладок ──
+// Используем Telegram CloudStorage (синхронизируется между устройствами)
+// или localStorage как фолбэк (если не в Telegram).
+
+function _bookmarkKey() { return 'bm_' + (comic?.id || 'x'); }
+
+function loadBookmark(callback) {
+  const key = _bookmarkKey();
+  const tg = window.Telegram?.WebApp;
+  if (tg?.CloudStorage?.getItem) {
+    tg.CloudStorage.getItem(key, (err, value) => {
+      if (err || !value) { callback(null); return; }
+      try { callback(JSON.parse(value)); } catch(e) { callback(null); }
+    });
+  } else {
+    try {
+      const v = localStorage.getItem(key);
+      callback(v ? JSON.parse(v) : null);
+    } catch(e) { callback(null); }
+  }
+}
+
+function persistBookmark(data) {
+  const key = _bookmarkKey();
+  const json = JSON.stringify(data);
+  const tg = window.Telegram?.WebApp;
+  if (tg?.CloudStorage?.setItem) {
+    tg.CloudStorage.setItem(key, json, () => {});
+  } else {
+    try { localStorage.setItem(key, json); } catch(e) {}
+  }
+}
+
+function loadBookmarkAndJump() {
+  loadBookmark(b => {
+    if (!b || !b.chapter_num) return;
+    const chIdx = comic.chapters.findIndex(c => c.num === b.chapter_num);
+    if (chIdx < 0) return;
+    // Если уже отрендерили нужную главу — просто скролл на страницу
+    if (chIdx === currentChapter) {
+      const p = Math.max(0, (b.page_num || 1) - 1);
+      requestAnimationFrame(() => scrollToPage(p));
+    } else {
+      currentChapter = chIdx;
+      loadChapter(chIdx);
+      const p = Math.max(0, (b.page_num || 1) - 1);
+      requestAnimationFrame(() => scrollToPage(p));
+    }
+    // Кэшируем для подсветки кнопки
+    comic.progress = { chapter_num: b.chapter_num, page_num: b.page_num };
+    refreshBookmarkBtn();
+  });
+}
+
+// Показывает ошибку прямо в заголовке (для отладки)
+function showDebug(msg) {
+  console.error(msg);
+  try {
+    comicTitle.textContent = '⚠ ' + msg.substring(0, 60);
+    comicTitle.style.color = '#ff6b6b';
+  } catch(e) {}
+}
+
+function loadChapter(idx, toEnd) {
+  currentChapter = idx;
+  const ch = comic.chapters[idx];
+  // Support both page_urls (old) and pages (new from DB)
+  const urls = ch.page_urls || ch.pages || [];
+  totalPages = urls.length > 0 ? urls.length : FALLBACK_PAGES;
+  chapterBtnLabel.textContent = ch.title || `Глава ${ch.num}`;
+  currentVisiblePage = toEnd ? totalPages - 1 : 0;
+  renderAllPages();
+  // Если нужно в конец — скроллим туда после рендера
+  if (toEnd) {
+    requestAnimationFrame(() => scrollToPage(totalPages - 1));
+  } else {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+}
+
+
+// ══════════════════════════════════════════════════════
+//  RENDER ALL PAGES (vertical scroll)
+// ══════════════════════════════════════════════════════
+function renderAllPages() {
+  const icons = ['💥','⚡','🔥','💫','🗡','👊','🌀','✨'];
+  const chPages = (comic.chapters?.[currentChapter]?.page_urls) || (comic.chapters?.[currentChapter]?.pages) || [];
+  let html = '';
+
+  for (let i = 0; i < totalPages; i++) {
+    const url = chPages[i];
+    if (url) {
+      // Всегда сначала пробуем прямой URL — у многих пользователей работает.
+      // Если нет (onerror) — window.tryFallback пройдёт по прокси.
+      html += `<img
+        data-page="${i}"
+        data-orig="${url}"
+        src="${url}"
+        alt="Стр. ${i+1}"
+        loading="${i < 3 ? 'eager' : 'lazy'}"
+        referrerpolicy="no-referrer"
+        onload="this.dataset.loaded='1'"
+        onerror="tryFallback(this, ${i})"
+      >`;
+    } else {
+      html += `
+        <div class="placeholder-page" data-page="${i}">
+          <div class="ph-icon">${icons[i % icons.length]}</div>
+          <div class="ph-label">${comic.title} — Стр. ${i+1}</div>
+        </div>`;
+    }
+  }
+
+  reader.innerHTML = html;
+  updatePageInfo(0);
+}
+
+
+// ══════════════════════════════════════════════════════
+//  CHAPTER PICKER
+// ══════════════════════════════════════════════════════
+function setupChapterPicker() {
+  chapterBtn.addEventListener('click', openChapterSheet);
+  chapterSheetClose.addEventListener('click', closeChapterSheet);
+  chapterSheetBg.addEventListener('click', closeChapterSheet);
+  // Блокируем скролл фона при свайпе по затемнению
+  chapterSheetBg.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+}
+
+function openChapterSheet() {
+  renderChapterList();
+  chapterSheetBg.classList.add('open');
+  chapterSheet.classList.add('open');
+  document.body.classList.add('locked');
+  chapterSheetOpen = true;
+}
+
+function closeChapterSheet() {
+  chapterSheetBg.classList.remove('open');
+  chapterSheet.classList.remove('open');
+  document.body.classList.remove('locked');
+  chapterSheetOpen = false;
+}
+
+function renderChapterList() {
+  const chs = comic.chapters || [];
+  chapterSheetList.innerHTML = chs.map((ch, i) => {
+    const count = (ch.page_urls && ch.page_urls.length) || 0;
+    const meta = count > 0 ? `${count} стр.` : 'Нет страниц';
+    const cur = i === currentChapter ? ' current' : '';
+    return `
+      <div class="chapter-item${cur}" data-ch="${i}">
+        <div class="chapter-num">${ch.num ?? (i+1)}</div>
+        <div class="chapter-info">
+          <div class="chapter-title-text">${ch.title || ('Глава ' + (ch.num ?? (i+1)))}</div>
+          <div class="chapter-meta">${meta}</div>
+        </div>
+        <svg class="chapter-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>`;
+  }).join('');
+
+  chapterSheetList.querySelectorAll('.chapter-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = parseInt(el.dataset.ch);
+      closeChapterSheet();
+      if (idx !== currentChapter) loadChapter(idx);
+    });
+  });
+
+  // Прокрутка к текущей главе
+  requestAnimationFrame(() => {
+    const cur = chapterSheetList.querySelector('.current');
+    if (cur) cur.scrollIntoView({ block: 'center', behavior: 'instant' });
+  });
+}
+
+
+// ══════════════════════════════════════════════════════
+//  SCROLL TRACKING
+// ══════════════════════════════════════════════════════
+function setupScroll() {
+  let ticking = false;
+  window.addEventListener('scroll', () => {
+    if (!ticking) {
+      requestAnimationFrame(() => {
+        onScroll();
+        ticking = false;
+      });
+      ticking = true;
+    }
+  }, { passive: true });
+}
+
+function onScroll() {
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  const progress = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+  progressBar.style.width = progress + '%';
+
+  const pages = reader.querySelectorAll('[data-page]');
+  const viewMid = scrollTop + window.innerHeight * 0.4;
+  let closestPage = 0;
+  let closestDist = Infinity;
+
+  pages.forEach(el => {
+    const rect = el.getBoundingClientRect();
+    const elMid = scrollTop + rect.top + rect.height / 2;
+    const dist = Math.abs(elMid - viewMid);
+    if (dist < closestDist) {
+      closestDist = dist;
+      closestPage = parseInt(el.dataset.page);
+    }
+  });
+
+  if (closestPage !== currentVisiblePage) {
+    currentVisiblePage = closestPage;
+    updatePageInfo(closestPage);
+  }
+}
+
+function updatePageInfo(page) {
+  pagePill.textContent = `${page + 1} / ${totalPages}`;
+  const isFirstChapter = currentChapter === 0;
+  const isLastChapter = currentChapter >= (comic.chapters?.length || 1) - 1;
+  document.getElementById('btnPrev').disabled = page === 0 && isFirstChapter;
+  document.getElementById('btnPrevPage').disabled = page === 0 && isFirstChapter;
+  document.getElementById('btnNextPage').disabled = page === totalPages - 1 && isLastChapter;
+  document.getElementById('btnLast').disabled = page === totalPages - 1 && isLastChapter;
+  refreshBookmarkBtn();
+}
+
+// Подсветка кнопки = мы стоим на сохранённой странице
+function refreshBookmarkBtn() {
+  const btn = document.getElementById('btnBookmark');
+  if (!btn || !comic) return;
+  const saved = comic.progress;
+  const ch = comic.chapters?.[currentChapter];
+  if (!saved || !ch) {
+    btn.classList.remove('saved');
+    return;
+  }
+  const curChNum = ch.num || (currentChapter + 1);
+  const onSavedPos = saved.chapter_num === curChNum && saved.page_num === (currentVisiblePage + 1);
+  btn.classList.toggle('saved', onSavedPos);
+}
+
+// ── Закладка: клик = сохранить текущую позицию в CloudStorage ──
+function saveBookmark() {
+  if (!comic || !comic.id) return;
+  const ch = comic.chapters?.[currentChapter];
+  if (!ch) return;
+
+  const curChNum = ch.num || (currentChapter + 1);
+  const curPage = currentVisiblePage + 1;
+
+  const saved = comic.progress;
+  if (saved && saved.chapter_num === curChNum && saved.page_num === curPage) {
+    showToast('🔖 Уже сохранено здесь');
+    return;
+  }
+
+  comic.progress = { chapter_num: curChNum, page_num: curPage };
+  persistBookmark(comic.progress);
+  refreshBookmarkBtn();
+  showToast('🔖 Закладка сохранена');
+}
+
+function showToast(text) {
+  const toast = document.getElementById('toast');
+  if (!toast) return;
+  toast.textContent = text;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+
+// ══════════════════════════════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════════════════════════════
+function setupNav() {
+  document.getElementById('btnPrev').addEventListener('click', () => goToPrev());
+  document.getElementById('btnPrevPage').addEventListener('click', () => goToPrev(1));
+  document.getElementById('btnNextPage').addEventListener('click', () => goToNext(1));
+  document.getElementById('btnLast').addEventListener('click', () => goToNext());
+  document.getElementById('btnGrid').addEventListener('click', toggleGrid);
+  document.getElementById('gridClose').addEventListener('click', toggleGrid);
+  document.getElementById('btnBookmark').addEventListener('click', saveBookmark);
+
+  document.addEventListener('keydown', e => {
+    if (chapterSheetOpen) { if (e.key === 'Escape') closeChapterSheet(); return; }
+    if (gridOpen) { if (e.key === 'Escape') toggleGrid(); return; }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp')   goToPrev(1);
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goToNext(1);
+    if (e.key === 'Home') goToPrev();
+    if (e.key === 'End')  goToNext();
+    if (e.key === 'g')    toggleGrid();
+  });
+}
+
+// Следующая страница / глава
+function goToNext(step) {
+  // step=1 → одна страница, без step → в конец текущей главы или следующую
+  if (step === 1) {
+    if (currentVisiblePage < totalPages - 1) {
+      scrollToPage(currentVisiblePage + 1);
+    } else if (currentChapter < (comic.chapters?.length || 1) - 1) {
+      // Последняя страница — переходим на следующую главу
+      loadChapter(currentChapter + 1);
+    }
+  } else {
+    // В конец текущей главы
+    if (currentVisiblePage < totalPages - 1) {
+      scrollToPage(totalPages - 1);
+    } else if (currentChapter < (comic.chapters?.length || 1) - 1) {
+      loadChapter(currentChapter + 1);
+    }
+  }
+}
+
+// Предыдущая страница / глава
+function goToPrev(step) {
+  if (step === 1) {
+    if (currentVisiblePage > 0) {
+      scrollToPage(currentVisiblePage - 1);
+    } else if (currentChapter > 0) {
+      // Первая страница — переходим на последнюю страницу предыдущей главы
+      loadChapter(currentChapter - 1, /*toEnd*/ true);
+    }
+  } else {
+    // В начало текущей главы
+    if (currentVisiblePage > 0) {
+      scrollToPage(0);
+    } else if (currentChapter > 0) {
+      loadChapter(currentChapter - 1);
+    }
+  }
+}
+
+function scrollToPage(idx) {
+  if (idx < 0 || idx >= totalPages) return;
+  const el = reader.querySelector(`[data-page="${idx}"]`);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+
+// ══════════════════════════════════════════════════════
+//  GRID VIEW
+// ══════════════════════════════════════════════════════
+function toggleGrid() {
+  gridOpen = !gridOpen;
+  if (gridOpen) {
+    renderGrid();
+    gridOverlay.classList.add('open');
+    document.getElementById('btnGrid').classList.add('active');
+  } else {
+    gridOverlay.classList.remove('open');
+    document.getElementById('btnGrid').classList.remove('active');
+  }
+}
+
+function renderGrid() {
+  gridTitle.textContent = `${comic.title} — ${totalPages} стр.`;
+  const icons = ['💥','⚡','🔥','💫','🗡','👊','🌀','✨'];
+  const chPages = (comic.chapters?.[currentChapter]?.page_urls) || (comic.chapters?.[currentChapter]?.pages) || [];
+
+  gridBody.innerHTML = Array.from({length: totalPages}, (_, i) => {
+    const url = chPages[i];
+    const isCurrent = i === currentVisiblePage ? ' current' : '';
+    const inner = url
+      ? `<img src="${url}" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="">`
+      : `<div class="grid-thumb-ph">${icons[i % icons.length]}</div>`;
+    return `
+      <div class="grid-thumb${isCurrent}" data-gpage="${i}">
+        ${inner}
+        <div class="grid-thumb-num">${i + 1}</div>
+      </div>`;
+  }).join('');
+
+  gridBody.querySelectorAll('.grid-thumb').forEach(el => {
+    el.addEventListener('click', () => {
+      scrollToPage(parseInt(el.dataset.gpage));
+      toggleGrid();
+    });
+  });
+
+  requestAnimationFrame(() => {
+    const cur = gridBody.querySelector('.current');
+    if (cur) cur.scrollIntoView({ block: 'center', behavior: 'instant' });
+  });
+}
+</script>
+</body>
+</html>
